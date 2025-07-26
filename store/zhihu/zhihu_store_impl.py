@@ -188,8 +188,8 @@ class ZhihuJsonStoreImplement(AbstractStore):
         """
 
         return (
-            f"{self.json_store_path}/{crawler_type_var.get()}_{store_type}_{utils.get_current_date()}.json",
-            f"{self.words_store_path}/{crawler_type_var.get()}_{store_type}_{utils.get_current_date()}"
+            f"{self.json_store_path}/{crawler_type_var.get()}_{store_type}.json",
+            f"{self.words_store_path}/{crawler_type_var.get()}_{store_type}"
         )
 
     def make_question_topic_file_name(self) -> str:
@@ -198,7 +198,7 @@ class ZhihuJsonStoreImplement(AbstractStore):
         Returns:
             str: 问题主题JSON文件路径
         """
-        return f"{self.json_store_path}/question_topic_{utils.get_current_date()}.json"
+        return f"{self.json_store_path}/question_topic.json"
 
     async def save_data_to_json(self, save_item: Dict, store_type: str):
         """

@@ -13,6 +13,7 @@ import argparse
 
 import config
 from tools.utils import str2bool
+import tools.utils as utils
 
 
 async def parse_cmd():
@@ -28,6 +29,8 @@ async def parse_cmd():
                         help='number of start page', default=config.START_PAGE)
     parser.add_argument('--keywords', type=str,
                         help='please input keywords', default=config.KEYWORDS)
+    parser.add_argument('--max_notes', type=int,
+                        help='maximum number of notes to crawl', default=config.CRAWLER_MAX_NOTES_COUNT)
     parser.add_argument('--get_comment', type=str2bool,
                         help='''whether to crawl level one comment, supported values case insensitive ('yes', 'true', 't', 'y', '1', 'no', 'false', 'f', 'n', '0')''', default=config.ENABLE_GET_COMMENTS)
     parser.add_argument('--get_sub_comment', type=str2bool,
@@ -36,6 +39,14 @@ async def parse_cmd():
                         help='where to save the data (csv or db or json or sqlite)', choices=['csv', 'db', 'json', 'sqlite'], default=config.SAVE_DATA_OPTION)
     parser.add_argument('--cookies', type=str,
                         help='cookies used for cookie login type', default=config.COOKIES)
+    parser.add_argument('--QURL', type=str,
+                        help='(zhihu only) question URL(s) to crawl, overrides ZHIHU_QUESTION_LIST. Multiple URLs can be separated by commas', default=None)
+    parser.add_argument('--cdp', type=str2bool,
+                        help='Enable CDP (Chrome DevTools Protocol) mode for better anti-detection', default=config.ENABLE_CDP_MODE)
+    parser.add_argument('--cdp_headless', type=str2bool,
+                        help='Enable headless mode when using CDP', default=config.CDP_HEADLESS)
+    parser.add_argument('--headless', type=str2bool,
+                        help='Enable headless mode for standard browser mode', default=config.HEADLESS)
 
     args = parser.parse_args()
 
@@ -45,7 +56,40 @@ async def parse_cmd():
     config.CRAWLER_TYPE = args.type
     config.START_PAGE = args.start
     config.KEYWORDS = args.keywords
+    config.CRAWLER_MAX_NOTES_COUNT = args.max_notes
     config.ENABLE_GET_COMMENTS = args.get_comment
     config.ENABLE_GET_SUB_COMMENTS = args.get_sub_comment
     config.SAVE_DATA_OPTION = args.save_data_option
     config.COOKIES = args.cookies
+    config.ENABLE_CDP_MODE = args.cdp
+    config.CDP_HEADLESS = args.cdp_headless
+    config.HEADLESS = args.headless
+    
+    # 记录重要参数设置
+    utils.logger.info(f"[parse_cmd] CRAWLER_MAX_NOTES_COUNT set to {config.CRAWLER_MAX_NOTES_COUNT}")
+    utils.logger.info(f"[parse_cmd] PLATFORM: {config.PLATFORM}, CRAWLER_TYPE: {config.CRAWLER_TYPE}")
+    utils.logger.info(f"[parse_cmd] ENABLE_GET_COMMENTS: {config.ENABLE_GET_COMMENTS}")
+    utils.logger.info(f"[parse_cmd] Browser mode - CDP: {config.ENABLE_CDP_MODE}, CDP_HEADLESS: {config.CDP_HEADLESS}, HEADLESS: {config.HEADLESS}")
+    
+    # 处理zhihu平台特定的--QURL参数
+    if config.PLATFORM == "zhihu" and args.QURL is not None:
+        # 支持逗号分隔的多个URL
+        question_urls = [url.strip() for url in args.QURL.split(',') if url.strip()]
+        
+        # 验证URL格式
+        valid_urls = []
+        for url in question_urls:
+            if "zhihu.com/question/" in url:
+                valid_urls.append(url)
+                utils.logger.info(f"[parse_cmd] Valid zhihu question URL: {url}")
+            else:
+                utils.logger.warning(f"[parse_cmd] Invalid zhihu question URL format (ignored): {url}")
+        
+        if valid_urls:
+            config.ZHIHU_QUESTION_LIST = valid_urls
+            utils.logger.info(f"[parse_cmd] ZHIHU_QUESTION_LIST overridden with {len(valid_urls)} valid URL(s)")
+        else:
+            utils.logger.error(f"[parse_cmd] No valid zhihu question URLs found in --QURL parameter")
+            
+    elif args.QURL is not None and config.PLATFORM != "zhihu":
+        utils.logger.warning(f"[parse_cmd] --QURL parameter ignored for platform '{config.PLATFORM}' (only valid for zhihu)")
