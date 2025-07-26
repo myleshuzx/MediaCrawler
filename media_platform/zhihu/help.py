@@ -18,7 +18,7 @@ import execjs
 from parsel import Selector
 
 from constant import zhihu as zhihu_constant
-from model.m_zhihu import ZhihuComment, ZhihuContent, ZhihuCreator
+from model.m_zhihu import ZhihuComment, ZhihuContent, ZhihuCreator, ZhihuQuestionTopic
 from tools import utils
 from tools.crawler_util import extract_text_from_html
 
@@ -395,7 +395,67 @@ class ZhihuExtractor:
         if not answer_info:
             return None
 
-        return self._extract_answer_content(answer_info.get(list(answer_info.keys())[0]))
+        answer_content = self._extract_answer_content(answer_info.get(list(answer_info.keys())[0]))
+        
+        # 如果从JSON中获取的voteup_count为0，尝试从HTML元素中提取
+        if answer_content and answer_content.voteup_count == 0:
+            voteup_count = self._extract_voteup_count_from_html(html_content)
+            if voteup_count > 0:
+                answer_content.voteup_count = voteup_count
+                
+        return answer_content
+
+    def _extract_voteup_count_from_html(self, html_content: str) -> int:
+        """
+        从HTML元素中提取赞同数的备用方法
+        Args:
+            html_content: HTML内容
+
+        Returns:
+            int: 赞同数，提取失败返回0
+        """
+        try:
+            selector = Selector(text=html_content)
+            
+            # 方法1: 尝试从投票按钮的aria-label属性中提取
+            # 如: <button aria-label="赞同 897 " ...>
+            vote_button = selector.xpath('//button[contains(@class, "VoteButton")]/@aria-label').get()
+            if vote_button:
+                import re
+                match = re.search(r'赞同\s*(\d+)', vote_button)
+                if match:
+                    return int(match.group(1))
+            
+            # 方法2: 尝试从按钮文本中提取
+            # 如: <button>赞同 897</button>
+            vote_text = selector.xpath('//button[contains(@class, "VoteButton")]//text()').getall()
+            if vote_text:
+                full_text = ''.join(vote_text)
+                import re
+                match = re.search(r'赞同\s*(\d+)', full_text)
+                if match:
+                    return int(match.group(1))
+            
+            # 方法3: 尝试从其他可能的选择器中提取
+            selectors_to_try = [
+                '//span[contains(text(), "赞同")]/following-sibling::text()',
+                '//span[contains(text(), "赞同")]/text()',
+                '//*[contains(@class, "vote") or contains(@class, "Vote")]/text()',
+            ]
+            
+            for selector_xpath in selectors_to_try:
+                texts = selector.xpath(selector_xpath).getall()
+                for text in texts:
+                    import re
+                    match = re.search(r'(\d+)', text.strip())
+                    if match and int(match.group(1)) > 0:
+                        return int(match.group(1))
+            
+            return 0
+            
+        except Exception as e:
+            utils.logger.warning(f"[ZhihuExtractor._extract_voteup_count_from_html] 提取赞同数失败: {e}")
+            return 0
 
     def extract_article_content_from_html(self, html_content: str) -> Optional[ZhihuContent]:
         """
@@ -414,7 +474,15 @@ class ZhihuExtractor:
         if not article_info:
             return None
 
-        return self._extract_article_content(article_info.get(list(article_info.keys())[0]))
+        article_content = self._extract_article_content(article_info.get(list(article_info.keys())[0]))
+        
+        # 如果从JSON中获取的voteup_count为0，尝试从HTML元素中提取
+        if article_content and article_content.voteup_count == 0:
+            voteup_count = self._extract_voteup_count_from_html(html_content)
+            if voteup_count > 0:
+                article_content.voteup_count = voteup_count
+                
+        return article_content
 
     def extract_zvideo_content_from_html(self, html_content: str) -> Optional[ZhihuContent]:
         """
@@ -442,7 +510,205 @@ class ZhihuExtractor:
             author_name: str = video_detail_info.get("author")
             video_detail_info["author"] = users.get(author_name)
 
-        return self._extract_zvideo_content(video_detail_info)
+        zvideo_content = self._extract_zvideo_content(video_detail_info)
+        
+        # 如果从JSON中获取的voteup_count为0，尝试从HTML元素中提取
+        if zvideo_content and zvideo_content.voteup_count == 0:
+            voteup_count = self._extract_voteup_count_from_html(html_content)
+            if voteup_count > 0:
+                zvideo_content.voteup_count = voteup_count
+                
+        return zvideo_content
+
+
+    def extract_question_topic_from_html(self, html_content: str, question_url: str) -> Optional[ZhihuQuestionTopic]:
+        """
+        从HTML中提取问题主题信息
+        Args:
+            html_content: HTML内容
+            question_url: 问题链接
+
+        Returns:
+            ZhihuQuestionTopic: 问题主题信息
+        """
+        try:
+            import time
+            selector = Selector(text=html_content)
+            
+            # 提取问题ID
+            question_id = ""
+            if "/question/" in question_url:
+                question_id = question_url.split("/question/")[-1].split("/")[0]
+            
+            # 提取问题标题
+            title_selectors = [
+                '//h1[@class="QuestionHeader-title"]//text()',
+                '//h1[contains(@class, "QuestionHeader-title")]//text()',
+                '//div[contains(@class, "QuestionHeader-main")]//h1//text()',
+                '//title/text()'
+            ]
+            
+            title = ""
+            for title_selector in title_selectors:
+                title_texts = selector.xpath(title_selector).getall()
+                if title_texts:
+                    title = ''.join(title_texts).strip()
+                    # 清理标题，移除知乎相关后缀
+                    if " - 知乎" in title:
+                        title = title.split(" - 知乎")[0]
+                    break
+            
+            # 提取问题详情 - 需要处理"显示全部"的情况
+            detail = self._extract_question_detail(selector)
+            
+            # 提取统计数据
+            answer_count = self._extract_count_from_text(selector, ["个回答", "个答案"])
+            follower_count = self._extract_count_from_text(selector, ["人关注", "关注者"])
+            visit_count = self._extract_count_from_text(selector, ["次浏览", "被浏览"])
+            
+            # 提取话题标签
+            topics = self._extract_topics(selector)
+            
+            # 提取创建者信息
+            author_info = self._extract_question_author(selector)
+            
+            # 创建问题主题对象
+            question_topic = ZhihuQuestionTopic(
+                question_id=question_id,
+                question_url=question_url,
+                title=title,
+                detail=detail,
+                answer_count=answer_count,
+                follower_count=follower_count,
+                visit_count=visit_count,
+                topics=topics,
+                author_id=author_info.get("author_id", ""),
+                author_name=author_info.get("author_name", ""),
+                author_url_token=author_info.get("author_url_token", ""),
+                crawl_time=int(time.time())
+            )
+            
+            return question_topic
+            
+        except Exception as e:
+            utils.logger.error(f"[ZhihuExtractor.extract_question_topic_from_html] 提取问题主题失败: {e}")
+            return None
+
+    def _extract_question_detail(self, selector: Selector) -> str:
+        """
+        提取问题详情，从QuestionRichText QuestionRichText--expandable中获取
+        """
+        # 首先尝试获取完整的HTML内容
+        detail_html_selectors = [
+            '//div[contains(@class, "QuestionRichText") and contains(@class, "QuestionRichText--expandable")]',
+            '//div[@class="QuestionRichText QuestionRichText--expandable"]',
+            '//div[contains(@class, "QuestionRichText")]',
+            '//span[@id="content"]'
+        ]
+        
+        detail = ""
+        
+        # 首先尝试获取HTML内容并提取文本
+        for i, html_selector in enumerate(detail_html_selectors):
+            elements = selector.xpath(html_selector)
+            if elements:
+                utils.logger.info(f"[ZhihuExtractor._extract_question_detail] Found element with selector {i}: {html_selector}")
+                
+                # 获取该元素下的所有文本，但排除按钮等不需要的内容
+                text_parts = []
+                
+                # 获取所有文本节点，但跳过按钮内的文本
+                all_texts = elements[0].xpath('.//text()[not(ancestor::button)]').getall()
+                
+                for text in all_texts:
+                    text = text.strip()
+                    if text and text not in ['显示全部', '展开', '收起', '编辑', '​', '︎']:
+                        text_parts.append(text)
+                
+                if text_parts:
+                    detail = ' '.join(text_parts)
+                    # 清理多余的空格
+                    import re
+                    detail = re.sub(r'\s+', ' ', detail).strip()
+                    if detail:
+                        utils.logger.info(f"[ZhihuExtractor._extract_question_detail] Extracted detail length: {len(detail)}")
+                        utils.logger.info(f"[ZhihuExtractor._extract_question_detail] Detail preview: {detail[:200]}...")
+                        break
+        
+        # 如果上面的方法没有获取到内容，使用备用方法
+        if not detail:
+            utils.logger.warning(f"[ZhihuExtractor._extract_question_detail] No detail found with primary selectors, trying backup")
+            backup_selectors = [
+                '//div[contains(@class, "QuestionHeader-detail")]//text()',
+                '//div[contains(@class, "RichText")]//text()'
+            ]
+            
+            for backup_selector in backup_selectors:
+                detail_texts = selector.xpath(backup_selector).getall()
+                if detail_texts:
+                    filtered_texts = [text.strip() for text in detail_texts 
+                                    if text.strip() and text.strip() not in ['显示全部', '展开', '收起', '编辑', '​']]
+                    if filtered_texts:
+                        detail = ' '.join(filtered_texts)
+                        utils.logger.info(f"[ZhihuExtractor._extract_question_detail] Found detail with backup selector: {backup_selector}")
+                        break
+        
+        return detail
+
+    def _extract_count_from_text(self, selector: Selector, keywords: list) -> int:
+        """
+        从文本中提取计数信息
+        """
+        import re
+        for keyword in keywords:
+            xpath = f'//*[contains(text(), "{keyword}")]//text()'
+            texts = selector.xpath(xpath).getall()
+            for text in texts:
+                match = re.search(r'(\d+(?:,\d+)*)\s*' + re.escape(keyword), text)
+                if match:
+                    return int(match.group(1).replace(',', ''))
+        return 0
+
+    def _extract_topics(self, selector: Selector) -> str:
+        """
+        提取问题话题标签
+        """
+        topic_selectors = [
+            '//div[contains(@class, "QuestionHeader-topics")]//a//text()',
+            '//div[contains(@class, "QuestionTopic")]//a//text()',
+            '//*[contains(@class, "Tag")]//text()'
+        ]
+        
+        topics = []
+        for topic_selector in topic_selectors:
+            topic_texts = selector.xpath(topic_selector).getall()
+            topics.extend([text.strip() for text in topic_texts if text.strip()])
+        
+        return ', '.join(list(set(topics)))  # 去重并合并
+
+    def _extract_question_author(self, selector: Selector) -> dict:
+        """
+        提取问题创建者信息
+        """
+        author_info = {
+            "author_id": "",
+            "author_name": "",
+            "author_url_token": ""
+        }
+        
+        # 提取作者链接和信息
+        author_links = selector.xpath('//div[contains(@class, "QuestionHeader")]//a[contains(@href, "/people/")]/@href').getall()
+        if author_links:
+            author_link = author_links[0]
+            if "/people/" in author_link:
+                author_info["author_url_token"] = author_link.split("/people/")[-1]
+        
+        # 提取作者姓名
+        author_names = selector.xpath('//div[contains(@class, "QuestionHeader")]//a[contains(@href, "/people/")]//text()').getall()
+        if author_names:
+            author_info["author_name"] = author_names[0].strip()
+        
+        return author_info
 
 
 def judge_zhihu_url(note_detail_url: str) -> str:

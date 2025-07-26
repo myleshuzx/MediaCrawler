@@ -39,6 +39,31 @@ class ZhihuContent(BaseModel):
     user_url_token: str = Field(default="", description="用户url_token")
 
 
+class ZhihuQuestionTopic(BaseModel):
+    """
+    知乎问题主题信息
+    """
+    question_id: str = Field(default="", description="问题ID")
+    question_url: str = Field(default="", description="问题链接")
+    title: str = Field(default="", description="问题标题")
+    detail: str = Field(default="", description="问题详情内容")
+    created_time: int = Field(default=0, description="创建时间")
+    updated_time: int = Field(default=0, description="更新时间")
+    answer_count: int = Field(default=0, description="回答数量")
+    follower_count: int = Field(default=0, description="关注者数量")
+    visit_count: int = Field(default=0, description="浏览数量")
+    topics: str = Field(default="", description="问题话题标签")
+    
+    # 问题创建者信息
+    author_id: str = Field(default="", description="创建者ID")
+    author_name: str = Field(default="", description="创建者昵称")
+    author_url_token: str = Field(default="", description="创建者url_token")
+    
+    # 元数据
+    crawl_time: int = Field(default=0, description="爬取时间戳")
+    source_keyword: str = Field(default="", description="来源关键词")
+
+
 class ZhihuComment(BaseModel):
     """
     知乎评论

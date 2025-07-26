@@ -10,6 +10,7 @@
 
 
 import asyncio
+import signal
 import sys
 from typing import Optional
 
@@ -24,6 +25,7 @@ from media_platform.tieba import TieBaCrawler
 from media_platform.weibo import WeiboCrawler
 from media_platform.xhs import XiaoHongShuCrawler
 from media_platform.zhihu import ZhihuCrawler
+import tools.utils as utils
 
 
 class CrawlerFactory:
@@ -66,15 +68,42 @@ async def main():
 
 
 def cleanup():
+    """Clean up resources when program exits"""
+    utils.logger.info("[main.cleanup] Starting cleanup process...")
     if crawler:
-        # asyncio.run(crawler.close())
-        pass
+        try:
+            asyncio.run(crawler.close())
+            utils.logger.info("[main.cleanup] Crawler closed successfully")
+        except Exception as e:
+            utils.logger.error(f"[main.cleanup] Error closing crawler: {e}")
+    
     if config.SAVE_DATA_OPTION in ["db", "sqlite"]:
-        asyncio.run(db.close())
+        try:
+            asyncio.run(db.close())
+            utils.logger.info("[main.cleanup] Database closed successfully")
+        except Exception as e:
+            utils.logger.error(f"[main.cleanup] Error closing database: {e}")
+    
+    utils.logger.info("[main.cleanup] Cleanup completed")
+
+
+def signal_handler(signum, frame):
+    """Handle interrupt signals"""
+    utils.logger.info(f"[main.signal_handler] Received signal {signum}, initiating cleanup...")
+    cleanup()
+    sys.exit(0)
 
 
 if __name__ == "__main__":
+    # 注册信号处理器，确保程序被中断时也能正确清理
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
     try:
         asyncio.get_event_loop().run_until_complete(main())
+    except KeyboardInterrupt:
+        utils.logger.info("[main] Program interrupted by user")
+    except Exception as e:
+        utils.logger.error(f"[main] Unexpected error: {e}")
     finally:
         cleanup()

@@ -23,7 +23,7 @@ from tenacity import retry, stop_after_attempt, wait_fixed
 import config
 from base.base_crawler import AbstractApiClient
 from constant import zhihu as zhihu_constant
-from model.m_zhihu import ZhihuComment, ZhihuContent, ZhihuCreator
+from model.m_zhihu import ZhihuComment, ZhihuContent, ZhihuCreator, ZhihuQuestionTopic
 from tools import utils
 
 from .exception import DataFetchError, ForbiddenError
@@ -547,3 +547,34 @@ class ZhiHuClient(AbstractApiClient):
         uri = f"/zvideo/{video_id}"
         response_html = await self.get(uri, return_response=True)
         return self._extractor.extract_zvideo_content_from_html(response_html)
+
+    async def get_question_topic_info(self, question_url: str) -> Optional[ZhihuQuestionTopic]:
+        """
+        获取问题主题信息
+        Args:
+            question_url: 问题链接
+
+        Returns:
+            Optional[ZhihuQuestionTopic]: 问题主题信息
+        """
+        # 获取页面HTML (展开操作已经在core中完成)
+        # 这里需要从当前页面获取HTML，而不是重新请求
+        try:
+            # 使用playwright页面获取当前的HTML内容
+            if hasattr(self, 'playwright_page') and self.playwright_page:
+                response_html = await self.playwright_page.content()
+            else:
+                # 如果没有playwright页面，使用HTTP请求
+                uri = question_url.replace("https://www.zhihu.com", "")
+                response_html = await self.get(uri, return_response=True)
+                
+            return self._extractor.extract_question_topic_from_html(response_html, question_url)
+        except Exception as e:
+            utils.logger.error(f"[ZhiHuClient.get_question_topic_info] Error getting question topic: {e}")
+            return None
+
+    async def _expand_question_detail(self, question_url: str):
+        """
+        展开问题详情（已在core中处理，这里跳过）
+        """
+        pass

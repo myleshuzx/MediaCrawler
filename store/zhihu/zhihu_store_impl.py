@@ -192,6 +192,14 @@ class ZhihuJsonStoreImplement(AbstractStore):
             f"{self.words_store_path}/{crawler_type_var.get()}_{store_type}_{utils.get_current_date()}"
         )
 
+    def make_question_topic_file_name(self) -> str:
+        """
+        为问题主题生成文件名
+        Returns:
+            str: 问题主题JSON文件路径
+        """
+        return f"{self.json_store_path}/question_topic_{utils.get_current_date()}.json"
+
     async def save_data_to_json(self, save_item: Dict, store_type: str):
         """
         Below is a simple way to save it in json format.
@@ -221,6 +229,28 @@ class ZhihuJsonStoreImplement(AbstractStore):
                     await self.WordCloud.generate_word_frequency_and_cloud(save_data, words_file_name_prefix)
                 except:
                     pass
+
+    async def save_question_topic_to_json(self, save_item: Dict):
+        """
+        保存问题主题到JSON文件
+        Args:
+            save_item: 问题主题数据
+
+        Returns:
+
+        """
+        pathlib.Path(self.json_store_path).mkdir(parents=True, exist_ok=True)
+        save_file_name = self.make_question_topic_file_name()
+        save_data = []
+
+        async with self.lock:
+            if os.path.exists(save_file_name):
+                async with aiofiles.open(save_file_name, 'r', encoding='utf-8') as file:
+                    save_data = json.loads(await file.read())
+
+            save_data.append(save_item)
+            async with aiofiles.open(save_file_name, 'w', encoding='utf-8') as file:
+                await file.write(json.dumps(save_data, ensure_ascii=False, indent=4))
 
     async def store_content(self, content_item: Dict):
         """

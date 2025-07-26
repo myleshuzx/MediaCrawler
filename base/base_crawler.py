@@ -43,6 +43,13 @@ class AbstractCrawler(ABC):
         """
         pass
 
+    @abstractmethod
+    async def close(self):
+        """
+        close browser and cleanup resources
+        """
+        pass
+
     async def launch_browser_with_cdp(self, playwright: Playwright, playwright_proxy: Optional[Dict],
                                      user_agent: Optional[str], headless: bool = True) -> BrowserContext:
         """

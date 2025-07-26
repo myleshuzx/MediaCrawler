@@ -14,7 +14,7 @@ from typing import List
 
 import config
 from base.base_crawler import AbstractStore
-from model.m_zhihu import ZhihuComment, ZhihuContent, ZhihuCreator
+from model.m_zhihu import ZhihuComment, ZhihuContent, ZhihuCreator, ZhihuQuestionTopic
 from store.zhihu.zhihu_store_impl import (ZhihuCsvStoreImplement,
                                           ZhihuDbStoreImplement,
                                           ZhihuJsonStoreImplement,
@@ -115,3 +115,28 @@ async def save_creator(creator: ZhihuCreator):
     local_db_item = creator.model_dump()
     local_db_item.update({"last_modify_ts": utils.get_current_timestamp()})
     await ZhihuStoreFactory.create_store().store_creator(local_db_item)
+
+
+async def save_question_topic(question_topic: ZhihuQuestionTopic):
+    """
+    保存知乎问题主题信息
+    Args:
+        question_topic: 问题主题对象
+
+    Returns:
+
+    """
+    if not question_topic:
+        return
+    
+    question_topic.source_keyword = source_keyword_var.get()
+    local_db_item = question_topic.model_dump()
+    local_db_item.update({"last_modify_ts": utils.get_current_timestamp()})
+    utils.logger.info(f"[store.zhihu.save_question_topic] zhihu question topic: {local_db_item}")
+    
+    # 只在JSON存储中保存问题主题
+    if config.SAVE_DATA_OPTION == "json":
+        store = ZhihuJsonStoreImplement()
+        await store.save_question_topic_to_json(local_db_item)
+    else:
+        utils.logger.warning(f"[store.zhihu.save_question_topic] Question topic storage only supported for JSON format, current: {config.SAVE_DATA_OPTION}")

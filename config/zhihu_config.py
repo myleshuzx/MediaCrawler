@@ -23,3 +23,9 @@ ZHIHU_SPECIFIED_ID_LIST = [
     "https://zhuanlan.zhihu.com/p/673461588",  # 文章
     "https://www.zhihu.com/zvideo/1539542068422144000",  # 视频
 ]
+
+# 指定知乎问题URL列表，用于爬取问题下的回答
+ZHIHU_QUESTION_LIST = [
+    "https://www.zhihu.com/question/1931487345355518159",  # 示例问题
+    # ........................
+]

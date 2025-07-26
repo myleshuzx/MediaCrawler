@@ -22,8 +22,8 @@ async def parse_cmd():
                         choices=["xhs", "dy", "ks", "bili", "wb", "tieba", "zhihu"], default=config.PLATFORM)
     parser.add_argument('--lt', type=str, help='Login type (qrcode | phone | cookie)',
                         choices=["qrcode", "phone", "cookie"], default=config.LOGIN_TYPE)
-    parser.add_argument('--type', type=str, help='crawler type (search | detail | creator)',
-                        choices=["search", "detail", "creator"], default=config.CRAWLER_TYPE)
+    parser.add_argument('--type', type=str, help='crawler type (search | detail | creator | question)',
+                        choices=["search", "detail", "creator", "question"], default=config.CRAWLER_TYPE)
     parser.add_argument('--start', type=int,
                         help='number of start page', default=config.START_PAGE)
     parser.add_argument('--keywords', type=str,
