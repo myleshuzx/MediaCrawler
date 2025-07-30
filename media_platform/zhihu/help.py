@@ -402,6 +402,12 @@ class ZhihuExtractor:
             voteup_count = self._extract_voteup_count_from_html(html_content)
             if voteup_count > 0:
                 answer_content.voteup_count = voteup_count
+        
+        # 如果从JSON中获取的comment_count为0，尝试从HTML元素中提取
+        if answer_content and answer_content.comment_count == 0:
+            comment_count = self._extract_comment_count_from_html(html_content)
+            if comment_count > 0:
+                answer_content.comment_count = comment_count
                 
         return answer_content
 
@@ -457,6 +463,66 @@ class ZhihuExtractor:
             utils.logger.warning(f"[ZhihuExtractor._extract_voteup_count_from_html] 提取赞同数失败: {e}")
             return 0
 
+    def _extract_comment_count_from_html(self, html_content: str) -> int:
+        """
+        从HTML元素中提取评论数的备用方法
+        Args:
+            html_content: HTML内容
+
+        Returns:
+            int: 评论数，提取失败返回0
+        """
+        try:
+            selector = Selector(text=html_content)
+            import re
+            
+            # 方法1: 从评论按钮中提取，格式如 "17 条评论"
+            comment_selectors = [
+                '//button[contains(@class, "ContentItem-action")]//text()',
+                '//button[contains(@class, "Button")]//text()',
+                '//*[contains(@class, "Comment") or contains(@class, "comment")]//text()',
+                '//span[contains(text(), "条评论")]//text()',
+                '//span[contains(text(), "评论")]//text()',
+            ]
+            
+            for selector_xpath in comment_selectors:
+                texts = selector.xpath(selector_xpath).getall()
+                for text in texts:
+                    text = text.strip()
+                    # 匹配 "17 条评论" 格式
+                    match = re.search(r'(\d+)\s*条评论', text)
+                    if match:
+                        return int(match.group(1))
+                    # 匹配纯数字后跟评论的格式
+                    match = re.search(r'(\d+)\s*评论', text)
+                    if match:
+                        return int(match.group(1))
+            
+            # 方法2: 从SVG图标附近的文本提取
+            # 查找包含评论图标的按钮
+            comment_buttons = selector.xpath('//button[.//svg[contains(@class, "Zi--Comment")]]//text()').getall()
+            for text in comment_buttons:
+                text = text.strip()
+                match = re.search(r'(\d+)\s*条评论', text)
+                if match:
+                    return int(match.group(1))
+                match = re.search(r'(\d+)\s*评论', text)
+                if match:
+                    return int(match.group(1))
+            
+            # 方法3: 从按钮的完整文本中提取
+            full_button_texts = selector.xpath('//button//text()').getall()
+            full_text = ''.join(full_button_texts)
+            match = re.search(r'(\d+)\s*条评论', full_text)
+            if match:
+                return int(match.group(1))
+            
+            return 0
+            
+        except Exception as e:
+            utils.logger.warning(f"[ZhihuExtractor._extract_comment_count_from_html] 提取评论数失败: {e}")
+            return 0
+
     def extract_article_content_from_html(self, html_content: str) -> Optional[ZhihuContent]:
         """
         extract zhihu article content from html
@@ -481,6 +547,12 @@ class ZhihuExtractor:
             voteup_count = self._extract_voteup_count_from_html(html_content)
             if voteup_count > 0:
                 article_content.voteup_count = voteup_count
+        
+        # 如果从JSON中获取的comment_count为0，尝试从HTML元素中提取
+        if article_content and article_content.comment_count == 0:
+            comment_count = self._extract_comment_count_from_html(html_content)
+            if comment_count > 0:
+                article_content.comment_count = comment_count
                 
         return article_content
 
@@ -517,6 +589,12 @@ class ZhihuExtractor:
             voteup_count = self._extract_voteup_count_from_html(html_content)
             if voteup_count > 0:
                 zvideo_content.voteup_count = voteup_count
+        
+        # 如果从JSON中获取的comment_count为0，尝试从HTML元素中提取
+        if zvideo_content and zvideo_content.comment_count == 0:
+            comment_count = self._extract_comment_count_from_html(html_content)
+            if comment_count > 0:
+                zvideo_content.comment_count = comment_count
                 
         return zvideo_content
 
